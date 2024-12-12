@@ -1,28 +1,64 @@
-# This workflow will build a .NET project
-# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-net
-
-name: .NET
+name: .NET CI/CD on Windows Server 2019
 
 on:
   push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
+    branches:
+      - main  # Trigger when changes are pushed to the main branch
 
 jobs:
   build:
-
-    runs-on: ubuntu-latest
+    runs-on: windows-2019  # Use Windows Server 2019 to build the application
 
     steps:
-    - uses: actions/checkout@v4
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: 8.0.x
-    - name: Restore dependencies
-      run: dotnet restore
-    - name: Build
-      run: dotnet build --no-restore
-    - name: Test
-      run: dotnet test --no-build --verbosity normal
+      - name: Checkout code
+        uses: actions/checkout@v3  # Get your code from the repository
+
+      - name: Set up .NET SDK
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: '6.0'  # Specify the .NET version you are using
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Build the project
+        run: dotnet build --configuration Release
+
+      - name: Run unit tests
+        run: dotnet test --configuration Release --no-build --verbosity normal
+
+      - name: Publish application
+        run: dotnet publish --configuration Release --output ./publish  # Prepare app for deployment
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: dotnet-publish
+          path: ./publish  # Upload the build output as an artifact
+
+  deploy:
+    runs-on: windows-2019  # Use Windows Server 2019 to deploy the application
+    needs: build  # Ensure deployment only happens after a successful build
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Download build artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: dotnet-publish  # Download the artifact from the build job
+
+      - name: Deploy to Windows Server 2019 via SSH
+        uses: appleboy/ssh-action@v0.1.0  # SSH action for deploying to the server
+        with:
+          host: ${{ secrets.WINDOWS_SERVER_IP }}  # The IP of your server
+          username: ${{ secrets.WINDOWS_SERVER_USER }}  # SSH username (Administrator)
+          password: ${{ secrets.WINDOWS_SERVER_PASSWORD }}  # SSH password
+          port: 22  # Default SSH port
+          source: './publish/*'  # Files to transfer to the server
+          target: 'C:/inetpub/wwwroot/yourapp'  # Target directory on your server where IIS serves the app
+
+      - name: Restart IIS (optional)
+        run: |
+          iisreset  # Restart IIS to load the new deployment
