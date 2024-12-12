@@ -1,0 +1,67 @@
+name: .NET CI/CD on Windows Server 2019
+
+on:
+  push:
+    branches:
+      - main  # Trigger on push to the main branch
+  pull_request:
+    branches:
+      - main  # Trigger for pull requests to the main branch
+
+jobs:
+  build:
+    runs-on: windows-2019  # Use Windows Server 2019 for building the project
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up .NET SDK
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: '6.0'  # Use the .NET version you need
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Build the project
+        run: dotnet build --configuration Release
+
+      - name: Run unit tests
+        run: dotnet test --configuration Release --no-build --verbosity normal
+
+      - name: Publish application
+        run: dotnet publish --configuration Release --output ./publish
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: dotnet-publish
+          path: ./publish
+
+  deploy:
+    runs-on: windows-2019  # Use Windows Server 2019 for deployment
+    needs: build  # Deploy only after the build is successful
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Download build artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: dotnet-publish
+
+      - name: Deploy to Windows Server 2019
+        uses: appleboy/ssh-action@v0.1.0
+        with:
+          host: ${{ secrets.WINDOWS_SERVER_IP }}
+          username: ${{ secrets.WINDOWS_SERVER_USER }}
+          password: ${{ secrets.WINDOWS_SERVER_PASSWORD }}
+          port: 22  # Default SSH port
+          source: './publish/*'
+          target: 'C:/inetpub/wwwroot'  # Path where IIS is serving the app
+
+      - name: Restart IIS (optional)
+        run: |
+          iisreset
